@@ -8,23 +8,27 @@
 # include <vector>
 # include <time.h>
 # include <climits>
+# include <cstdio>
 
 using namespace std;
 
 int* generate_random_array(int grid_size);
 int** convertArraytoMatrix(int* array, int n);
 void solveMatrix(int* array, int grid_size);
-void solveNextRow(int* array, int grid_size);
 bool isSolvable(int* array, int grid_size);
 void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n);
 int manhattanDistances(int* array, int grid_size);
 void swap(int* array, int loc1, int loc2);
 bool isSolution(int* array, int grid_size);
-void relocate(int* array, int grid_size, int index, int piece);
 bool checkLeft(int position, int n);
 bool checkUp(int position, int n);
 int findSmallest(int* array);
-int* findNumLoc(int* array, int grid_size, int target);
+
+inline int h2(int i1, int j1, int i2, int j2, int* array);
+int ida_star(int* array, int grid_size);
+bool dfs(int g, int h, int* array, int grid_size);
+inline bool valid(int r, int c);
+//inline void swap(int i, int j, int new_i, int new_j, int* array);
 
 void freeMatrix(int** matrix, int row);
 void printMatrix(int** matrix, int row, int col);
@@ -35,7 +39,11 @@ int grid = pow(3,2);
 int counter, last(grid-1);
 int loc[2] = {0, 0};
 int iterate = 0;
-int prev = INT_MAX;
+map<int, int> predecessors;
+map<unsigned long long, int> visited;
+int dr[] = { 0,-1, 0, 1}; // E,N,W,S
+int dc[] = { 1, 0,-1, 0}; // R,U,L,D
+int bound, nextBound;
 
 int main ( int argc, char *argv[] ) {
   
@@ -110,7 +118,6 @@ void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n) {
   std::map<int, int>::iterator it;
   it = theMap.find(curr_key);
   searchedElements.push_back(it->second);
-  //cout << it->second << " ";
 
   if (it->second == last) {
     loc[0] = it->first / n;
@@ -128,36 +135,103 @@ void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n) {
 void solveMatrix(int* array, int grid_size) {
   bool solvable = isSolvable(array, grid_size);
   if (solvable) {
-    solveNextRow(array, grid_size);
+    int t = ida_star(array, grid_size);
+    cout << "\nBound: " << t << endl;
   } else {
     cout <<"\nPuzzle is not solvable :/" << endl;
   }
 }
 
-void solveNextRow(int* array, int grid_size) {
-  for (int i=0; i<sqrt(grid_size); i++) {
-    int* position = findNumLoc(array, grid_size, i);
-    int index = position[0]*sqrt(grid_size) + position[1];
-    while (index != i) {
-      relocate(array, grid_size, index, i);
-      index = position[0]*sqrt(grid_size) + position[1];
-      break;
+int ida_star(int* array, int grid_size) {
+  bound = manhattanDistances(array, grid_size);
+  while(true) {
+    //cout << "in while" << endl;
+    nextBound = INT_MAX;
+    predecessors.clear();
+    visited.clear();
+    if (dfs(0, manhattanDistances(array, grid_size), array, grid_size)) {
+      return bound;
+    }
+    if (nextBound == INT_MAX) {
+      cout << "\nNextBound is infinity" << endl;
+      return -1;
+    }
+    bound = nextBound;
+    if (bound > 45) {
+      cout << "more than 45" << endl;
+      return -1;
     }
   }
 }
 
-void relocate(int* array, int grid_size, int index, int piece) {
-  int* possible = new int[2];
-  int location = loc[0]*sqrt(grid_size) + loc[1];
-  if (checkLeft(index-1, sqrt(grid_size))) {
-    possible[0] = abs(location - index - 1);
-  }
-  if (checkUp(index-1, sqrt(grid_size))) {
-    possible[1] = abs(index-sqrt(grid_size)*(index / sqrt(grid_size))-sqrt(grid_size)+abs(location-index));
+bool dfs(int g, int h, int* array, int grid_size) {
+
+  if (iterate == 3) {
+    return false;
   }
 
-  int shortest = findSmallest(possible);
+  iterate++;
+  cout << "\nDFS, Iteration: " << iterate << endl;
+
+  if (g + h > bound) {
+    cout << "in first if" << endl;
+    nextBound = min(nextBound, g + h);
+    return false;
+  }
+
+  if (isSolution(array, grid_size)) {
+    cout << "solution found" << endl;
+    return true;
+  }
   
+  unsigned long long state = 0;
+  for (int i=0; i<grid_size; i++) {
+    state <<= 4;
+    state += array[i];
+  }
+
+  if(visited.count(state) && visited[state] <= g) {
+    return false;
+  }
+  visited[state] = g;
+
+  int i;
+  for (i=0; i<grid_size; i++) {
+    if (array[i] == grid_size-1) {
+      break;
+    }
+  }
+
+  int j = i % int(sqrt(grid_size));
+  i /= sqrt(grid_size);
+
+  cout << "Blank: (" << i << ", " << j << ")" << endl;
+
+  int new_i, new_j;
+  for (int d = 0; d < sqrt(grid_size)+1; d++) {
+    new_i = i + dr[d]; new_j = j = dc[d];
+    cout << "New possible Spot: (" << new_i << ", " << new_j << ")" << endl;
+    if (valid(new_i, new_j)) {
+      cout << "New Valid Spot: (" << new_i << ", " << new_j << ")" << endl;
+      int dh = h2(i, j, new_i, new_j, array);
+      //swap(i, j, new_i, new_j, array);
+      swap(array, i*sqrt(grid_size)+j, new_i*sqrt(grid_size)+new_j);
+
+      predecessors[g+1] = d;
+
+       cout << "swap occured" << endl;
+       int** test = convertArraytoMatrix(array, sqrt(grid_size));
+       printMatrix(test, sqrt(grid_size), sqrt(grid_size));
+
+      if (dfs(g+1, h+dh, array, grid_size)) {
+        return true;
+      }
+      cout << "after recursive call swap occured " << endl;
+      swap(array, i*sqrt(grid_size)+j, new_i*sqrt(grid_size)+new_j);
+      //swap(i, j, new_i, new_j, array);
+    }
+  }
+  return false;
 }
 
 int findSmallest(int* array) {
@@ -172,15 +246,13 @@ int findSmallest(int* array) {
   return index;
 }
 
-int* findNumLoc(int* array, int grid_size, int target) {
-  int* pos = new int[2];
-  for (int i=0; i<grid_size; i++) {
-    if (array[i] = target) {
-      pos[0] = i / int(sqrt(grid_size));
-      pos[1] = i % int(sqrt(grid_size));
-    }
-  }
-  return pos;
+inline int h2(int i1, int j1, int i2, int j2, int* array) { // heuristic: sum of manhattan distances (compute delta)
+  int tgt_i = array[i2 * 4 + j2] / 4, tgt_j = array[i2 * 4 + j2] % 4;
+  return -(abs(i2 - tgt_i) + abs(j2 - tgt_j)) + (abs(i1 - tgt_i) + abs(j1 - tgt_j));
+}
+
+inline bool valid(int r, int c) {
+  return 0 <= r && r < 4 && 0 <= c && c < 4;
 }
 
 bool checkLeft(int position, int n) {
@@ -203,7 +275,7 @@ bool checkUp(int position, int n) {
 
 bool isSolution(int* array, int grid_size) {
   for (int i=0; i<grid_size; i++) {
-    if (array[i] != i) {
+    if (array[i] != grid_size && array[i] != i) {
       return false;
     }
   }
@@ -211,10 +283,20 @@ bool isSolution(int* array, int grid_size) {
 }
 
 void swap(int* array, int loc1, int loc2) {
-  int temp = array[loc2];
-  array[loc2] = array[loc1];
-  array[loc1] = temp;
+  cout << "loc1 = " << loc1 << ". loc2 = " << loc2 << endl;
+  int temp = array[loc1];
+  array[loc1] = array[loc2];
+  //cout << "IN SWAP: Loc1 now contains " << array[loc1] << endl;
+  array[loc2] = temp;
+  //cout << "IN SWAP: Loc2 now contains " << array[loc2] << endl;
 }
+
+
+//inline void swap(int i, int j, int new_i, int new_j, int* array) {
+//  int temp = array[i * 4 + j];
+//  array[i * 4 + j] = array[new_i * 4 + new_j];
+//  array[new_i * 4 + new_j] = temp;
+//}
 
 int manhattanDistances(int* array, int grid_size) {
   int distance = 0;
