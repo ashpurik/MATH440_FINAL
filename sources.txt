@@ -1,0 +1,7 @@
+http://en.wikipedia.org/wiki/IDA*
+
+https://github.com/LuisFloresV/CP-Data-Structures-Algorithms/blob/master/ch8/ch8_01_UVa10181.cpp
+
+http://code.google.com/p/julien-labs/source/browse/trunk/SlidingPuzzle/src/be/dramaix/ai/slidingpuzzle/server/search/IDAStar.java
+
+

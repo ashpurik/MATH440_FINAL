@@ -14,24 +14,24 @@ using namespace std;
 int* generate_random_array(int grid_size);
 int** convertArraytoMatrix(int* array, int n);
 void solveMatrix(int* array, int grid_size);
-void solve(int* array, int grid_size);
+void solveNextRow(int* array, int grid_size);
 bool isSolvable(int* array, int grid_size);
 void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n);
 int manhattanDistances(int* array, int grid_size);
-
 void swap(int* array, int loc1, int loc2);
+bool isSolution(int* array, int grid_size);
+void relocate(int* array, int grid_size, int index, int piece);
 bool checkLeft(int position, int n);
-bool checkRight(int position, int n);
 bool checkUp(int position, int n);
-bool checkDown(int position, int n);
 int findSmallest(int* array);
+int* findNumLoc(int* array, int grid_size, int target);
 
 void freeMatrix(int** matrix, int row);
 void printMatrix(int** matrix, int row, int col);
 void printArray(int* array, int size);
 
 vector<int> searchedElements;
-int grid = pow(10,2);
+int grid = pow(3,2);
 int counter, last(grid-1);
 int loc[2] = {0, 0};
 int iterate = 0;
@@ -46,8 +46,8 @@ int main ( int argc, char *argv[] ) {
   //printArray(numbers, grid);
   //cout << endl;
   solveMatrix(numbers, grid);  
-  int** solved = convertArraytoMatrix(numbers, sqrt(grid));
-  printMatrix(solved, sqrt(grid), sqrt(grid));
+  //int** solved = convertArraytoMatrix(numbers, sqrt(grid));
+  //printMatrix(solved, sqrt(grid), sqrt(grid));
 
   delete numbers;
   freeMatrix(matrix, sqrt(grid));
@@ -128,97 +128,42 @@ void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n) {
 void solveMatrix(int* array, int grid_size) {
   bool solvable = isSolvable(array, grid_size);
   if (solvable) {
-    solve(array, grid_size);
+    solveNextRow(array, grid_size);
   } else {
     cout <<"\nPuzzle is not solvable :/" << endl;
   }
 }
 
-void solve(int* array, int grid_size) {
-  cout << "Iteration: " << iterate << endl;
+void solveNextRow(int* array, int grid_size) {
+  for (int i=0; i<sqrt(grid_size); i++) {
+    int* position = findNumLoc(array, grid_size, i);
+    int index = position[0]*sqrt(grid_size) + position[1];
+    while (index != i) {
+      relocate(array, grid_size, index, i);
+      index = position[0]*sqrt(grid_size) + position[1];
+      break;
+    }
+  }
+}
+
+void relocate(int* array, int grid_size, int index, int piece) {
+  int* possible = new int[2];
   int location = loc[0]*sqrt(grid_size) + loc[1];
-  //cout << "Location : " << location << endl;
-  int distances[4] = {INT_MAX, INT_MAX, INT_MAX, INT_MAX};
-
-  if (iterate == 100) {
-    return;
+  if (checkLeft(index-1, sqrt(grid_size))) {
+    possible[0] = abs(location - index - 1);
+  }
+  if (checkUp(index-1, sqrt(grid_size))) {
+    possible[1] = abs(index-sqrt(grid_size)*(index / sqrt(grid_size))-sqrt(grid_size)+abs(location-index));
   }
 
-  if (manhattanDistances(array, grid_size) == 0) {
-    return;
-  } else {
-    if(checkLeft(location, sqrt(grid_size))) {
-      //cout << "in left" << endl;
-      swap(array, location, location-1);
-      distances[0] = manhattanDistances(array, grid_size);
-      swap(array, location, location-1);
-    }
-    if(checkRight(location, sqrt(grid_size))) {
-      //cout << "in right" << endl;
-      swap(array, location, location+1);
-      distances[1] = manhattanDistances(array, grid_size);
-      swap(array, location, location+1);
-    }
-    if(checkUp(location, sqrt(grid_size))) {
-      //cout << "in up" << endl;
-      swap(array, location-1, location);
-      distances[2] = manhattanDistances(array, grid_size);
-      swap(array, location-1, location);
-    }
-    if(checkDown(location, sqrt(grid_size))) {
-      //cout << "in down" << endl;
-      swap(array, location+1, location);
-      distances[3] = manhattanDistances(array, grid_size);
-      swap(array, location+1, location);
-    }
-
-    printArray(distances, 4);
-    cout << endl;
-    //cout << "Previous: " << prev << endl;
-
-    int smallestPos = findSmallest(distances);
-    switch (smallestPos) {
-      case 0: 
-        //cout << "swapped Left\n" << endl;
-        swap(array, location, location-1);
-        loc[1] = (location-1) % int(sqrt(grid_size));
-        prev = 0;
-        break;
-      case 1:
-        //cout << "swapped Right\n" << endl;
-        swap(array, location, location+1);
-        loc[1] = (location+1) % int(sqrt(grid_size));
-        prev = 1;
-        break;
-      case 2:
-        //cout << "swapped Up\n" << endl;
-        swap(array, location-sqrt(grid_size), location);
-        loc[0] = (location-sqrt(grid_size)) / sqrt(grid_size);
-        //cout << "Moving to " << location-1 << "from " << location << endl;
-        prev = 2;
-        break;
-      case 3:
-        //cout << "swapped down\n" << endl;
-        swap(array, location+sqrt(grid_size), location);
-        loc[0] = (location+sqrt(grid_size)) / sqrt(grid_size);
-        //cout << "Moving to " << location+1 << " from " << location << endl;
-        prev = 3;
-        break;
-    }
-
-   //int** test = convertArraytoMatrix(array, sqrt(grid_size));
-   //printMatrix(test, sqrt(grid_size), sqrt(grid_size));
-    //cout << endl;
-    //prev = location;
-    iterate++;
-    solve(array, grid_size);
-  }
+  int shortest = findSmallest(possible);
+  
 }
 
 int findSmallest(int* array) {
   int smallest = INT_MAX;
   int index = 0;
-  for (int i=0; i<4; i++) {
+  for (int i=0; i<2; i++) {
     if (array[i] < smallest) {
       smallest = array[i];
       index = i;
@@ -227,24 +172,20 @@ int findSmallest(int* array) {
   return index;
 }
 
-void swap(int* array, int loc1, int loc2) {
-  int temp = array[loc2];
-  array[loc2] = array[loc1];
-  array[loc1] = temp;
+int* findNumLoc(int* array, int grid_size, int target) {
+  int* pos = new int[2];
+  for (int i=0; i<grid_size; i++) {
+    if (array[i] = target) {
+      pos[0] = i / int(sqrt(grid_size));
+      pos[1] = i % int(sqrt(grid_size));
+    }
+  }
+  return pos;
 }
 
 bool checkLeft(int position, int n) {
   //cout << "Left check: " << position << ". Previous: " << prev << endl;
-  if (position % n == 0 || prev == 1) {
-    return false;
-  } else {
-    return true;
-  }
-}
-
-bool checkRight(int position, int n) {
-  //cout << "Right check: " << position << ". Previous: " << prev << endl;
-  if (position % n == (n-1) || prev == 0) {
+  if (position % n == 0) {
     return false;
   } else {
     return true;
@@ -253,20 +194,26 @@ bool checkRight(int position, int n) {
 
 bool checkUp(int position, int n) {
   //cout << "Up check: " << position << ". Previous: " << prev << endl;
-  if (position / n == 0 || prev == 3) {
+  if (position / n == 0) {
     return false;
   } else {
     return true;
   }
 }
 
-bool checkDown(int position, int n) {
-  //cout << "Down check: " << position << ". Previous: " << prev << endl;
-  if (position / n == (n-1) || prev == 2) {
-    return false;
-  } else {
-    return true;
+bool isSolution(int* array, int grid_size) {
+  for (int i=0; i<grid_size; i++) {
+    if (array[i] != i) {
+      return false;
+    }
   }
+  return true;
+}
+
+void swap(int* array, int loc1, int loc2) {
+  int temp = array[loc2];
+  array[loc2] = array[loc1];
+  array[loc1] = temp;
 }
 
 int manhattanDistances(int* array, int grid_size) {
