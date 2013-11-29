@@ -23,7 +23,7 @@ void swap(int* array, int loc1, int loc2);
 
 bool dfs(int steps, int currManhat, int* array, int grid_size, int bound);
 int ida_star(int* array, int grid_size);
-int manhattan(int start, int end, int* array, int n); 
+int manhattan(int start, int end, int* array, int n);
 int convertCoordinatestoIndex(int i, int j, int n);
 bool checkMove(int i, int j, int n);
 bool checkLeft(int j);
@@ -38,27 +38,29 @@ void freeMatrix(int** matrix, int row);
 void printMatrix(int** matrix, int row, int col);
 void printArray(int* array, int size);
 
-int N = 5; 
-int GRID = (N*N);
-
 vector<int> searchedElements;
-int counter, last(GRID-1);
+int counter;
 int loc[2] = {0, 0};
 
 int nextBound;
 
-map<int, int> path;
+map<char, char> path;
 map<unsigned long long, int> visited;
 
 int main ( int argc, char *argv[] ) {
   
   clock_t start = clock();
+  int N = 5;
+  int GRID = N*N;
 
-  int* numbers = generate_random_array(GRID);
+  cout << "\n---------------------------------" << endl;
+
+  int* numbers = new int[GRID];
+  numbers = generate_random_array(GRID);
+
   int** matrix = convertArraytoMatrix(numbers, N);
   printMatrix(matrix, N, N);
-  cout << endl;
-  solveMatrix(numbers, GRID);  
+  solveMatrix(numbers, GRID);
   int** solved = convertArraytoMatrix(numbers, N);
   cout << endl;
   printMatrix(solved, N, N);
@@ -66,10 +68,11 @@ int main ( int argc, char *argv[] ) {
   delete numbers;
   freeMatrix(matrix, N);
   freeMatrix(solved, N);
-
   clock_t end = clock();
 
-  cout << setprecision(15) << "EXECUTION TIME: " << double(start-end)/CLOCKS_PER_SEC << " seconds" << endl;
+  cout << "---------------------------------" << endl;
+
+  cout << setprecision(15) << "EXECUTION TIME: " << double(end-start)/CLOCKS_PER_SEC << " seconds\n" << endl;
 
   return 0;
 }
@@ -106,16 +109,11 @@ bool isSolvable(int* array, int grid_size) {
   std::map<int,int>::iterator it;
   for (it=num_loc_pairs.begin(); it!= num_loc_pairs.end(); it++) {
     if (!(std::find(searchedElements.begin(), searchedElements.end(), it->first)!= searchedElements.end()) ) {
-      //cout << "( ";
       findCycle(num_loc_pairs, it->first, it->first, sqrt(grid_size));
-      //cout << ")";
     }
   }
 
-  //cout << "\n\nCounter = " << counter;
   int manhattan = 2*(sqrt(grid_size) -1) - loc[0] - loc[1];
-  //cout << "\n\nManhattan Distance = " << manhattan;
-  //cout << "\n\nNumber of Interchanges = " << manhattan+counter << endl;
 
   if ((manhattan+counter) % 2 == 0) {
     return true;
@@ -132,7 +130,7 @@ int convertCoordinatestoIndex(int i, int j, int n) {
 int manhattan(int start, int end, int* array, int n) {
     int goal_i = array[end] / n; //where the number at possible swap should end up (i)
     int goal_j = array[end] % n; //where the number at possible swap should end up (j)
-    int initial_i = start / n; //current i location of space 
+    int initial_i = start / n; //current i location of space
     int initial_j = start % n; //current j location of space
     int possible_i = end / n; //the position of i possible swap
     int possible_j = end % n; //the position of j possible swap
@@ -146,14 +144,14 @@ void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n) {
   it = theMap.find(curr_key);
   searchedElements.push_back(it->second);
 
-  if (it->second == last) {
+  if (it->second == ((n*n)-1)) {
     loc[0] = it->first / n;
     loc[1] = it->first % n;
   }
 
   if (initial_key == it->second) {
     return;
-  } else {   
+  } else {
     counter++;
     findCycle(theMap, initial_key, it->second, n);
   }
@@ -162,11 +160,8 @@ void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n) {
 void solveMatrix(int* array, int grid_size) {
   bool solvable = isSolvable(array, grid_size);
   if (solvable) {
-
-    int num_steps=0;
-    if (((num_steps = ida_star(array, grid_size)) != -1)) {
-      printPath(num_steps), printf("\n");    
-    }
+    int num_steps = ida_star(array, grid_size);
+    printPath(num_steps), printf("\n");
 
   } else {
     cout <<"\nPuzzle is not solvable :/" << endl;
@@ -175,15 +170,17 @@ void solveMatrix(int* array, int grid_size) {
 
 int ida_star(int* array, int grid_size) {
   int bound = manhattanDistances(array, grid_size);
+  cout << "INITIAL BOUND: " << bound << endl;
   while (true) {
     nextBound = INT_MAX; // next limit
     path.clear();
     visited.clear();
     if (dfs(0, manhattanDistances(array, grid_size), array, grid_size, bound)) {
-      cout << "FINAL NUMBER OF STEPS: " << bound << endl;
+      cout << "\nFINAL NUMBER OF STEPS: " << bound << endl;
       return bound;
     }
-    bound = nextBound; // nlim > lim
+    cout << "NEW BOUND: " << bound << endl;
+    bound = nextBound; // nextBound > bound
   }
 }
 
@@ -199,16 +196,17 @@ bool dfs(int steps, int currManhat, int* array, int grid_size, int bound) {
   }
 
   unsigned long long state = 0;
-  for (int i = 0; i < grid_size; i++) { // transform 16 numbers into 6ROW_SIZE bits, exactly into ULL
-    state <<= int(sqrt(grid_size)); // move left ROW_SIZE bits
-    state += array[i]; // add this digit (max 15 or 1111)
+  for (int i = 0; i < grid_size; i++) { // transform the grid into an unsigned long long, to store the state
+    state <<= int(sqrt(grid_size)); // move to the left n size bits
+    state += array[i]; // add it to the state
   }
 
-  if (visited.count(state) && (visited[state] <= steps)) { // not pure backtracking... this is to prevent cycling
-    return false; // not good
+  if (visited.count(state) && (visited[state] <= steps)) { // we want to prevent cycling on the grid
+    //cout << "cycling" << endl;
+    return false; 
   }
 
-  visited.insert(std::pair<unsigned long long, int>(state, steps));
+  visited[state] = steps;
 
   int i, new_i, new_j;
   for (i = 0; i < grid_size; i++) {
@@ -346,5 +344,5 @@ void printMatrix(int** matrix, int row, int col) {
       cout << matrix[i][j] << " ";
     }
   cout << endl;
-  } 
+  }
 }
