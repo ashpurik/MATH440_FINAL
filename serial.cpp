@@ -56,8 +56,12 @@ int main ( int argc, char *argv[] ) {
   cout << "\n---------------------------------" << endl;
 
   int* numbers = new int[GRID];
-  numbers = generate_random_array(GRID);
-
+  int stuff[9] = {2, 4, 6, 7, 3, 5, 8, 1, 0};
+  //numbers = generate_random_array(GRID);
+  for (int i=0; i<GRID; i++) {
+    numbers[i] = stuff[i];
+  }
+  //int* numbers = {2, 4, 6, 7, 3, 5, 8, 1, 0};
   int** matrix = convertArraytoMatrix(numbers, N);
   printMatrix(matrix, N, N);
   solveMatrix(numbers, GRID);
