@@ -56,11 +56,11 @@ int main ( int argc, char *argv[] ) {
   cout << "\n---------------------------------" << endl;
 
   int* numbers = new int[GRID];
-  int stuff[9] = {2, 4, 6, 7, 3, 5, 8, 1, 0};
+  int stuff[9] = {8, 0, 4, 7, 2, 6, 3, 5, 1};
   //numbers = generate_random_array(GRID);
-  for (int i=0; i<GRID; i++) {
-    numbers[i] = stuff[i];
-  }
+   for (int i=0; i<GRID; i++) {
+     numbers[i] = stuff[i];
+   }
   //int* numbers = {2, 4, 6, 7, 3, 5, 8, 1, 0};
   int** matrix = convertArraytoMatrix(numbers, N);
   printMatrix(matrix, N, N);
@@ -181,9 +181,10 @@ int ida_star(int* array, int grid_size) {
     visited.clear();
     if (dfs(0, manhattanDistances(array, grid_size), array, grid_size, bound)) {
       cout << "\nFINAL NUMBER OF STEPS: " << bound << endl;
+      cout << "VISITED SIZE:" << visited.size() << endl;
       return bound;
     }
-    cout << "VISITED SIZE:" << visited.size() << endl;
+    //cout << "VISITED SIZE:" << visited.size() << endl;
     cout << "NEW BOUND: " << bound << endl;
     bound = nextBound; // nextBound > bound
   }
