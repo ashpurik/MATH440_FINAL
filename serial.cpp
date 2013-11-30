@@ -50,7 +50,7 @@ map<unsigned long long, int> visited;
 int main ( int argc, char *argv[] ) {
   
   clock_t start = clock();
-  int N = 5;
+  int N = 3;
   int GRID = N*N;
 
   cout << "\n---------------------------------" << endl;
@@ -179,6 +179,7 @@ int ida_star(int* array, int grid_size) {
       cout << "\nFINAL NUMBER OF STEPS: " << bound << endl;
       return bound;
     }
+    cout << "VISITED SIZE:" << visited.size() << endl;
     cout << "NEW BOUND: " << bound << endl;
     bound = nextBound; // nextBound > bound
   }
