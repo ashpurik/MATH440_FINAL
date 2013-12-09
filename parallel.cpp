@@ -23,18 +23,14 @@ bool isSolvable(int* array, int grid_size);
 void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n);
 int manhattanDistances(int* array, int grid_size);
 void swap(int* array, int loc1, int loc2);
-
-bool dfs(int steps, int currManhat, int* array, int grid_size, int bound, int nextBound, int rank, int iter);
-int ida_star(int* array, int grid_size);
+bool dfs(int steps, int currManhat, int* array, int grid_size, int nextBound, int bound, int rank, int iter);
 int manhattan(int start, int end, int* array, int n);
 int convertCoordinatestoIndex(int i, int j, int n);
-bool checkMove(int i, int j, int n);
 bool checkLeft(int j);
 bool checkUp(int i);
 bool checkDown(int i, int n);
 bool checkRight(int j, int n);
-
-void printPath(int previous);
+int findSection(int* array, int grid_size);
 bool isSolution(int* array, int grid_size);
 void slave(int grid_size, int rank);
 
@@ -46,15 +42,15 @@ vector<int> searchedElements;
 int counter;
 int loc[2] = {0, 0};
 
-int nextBound;// = INT_MAX;
+int nextBound = INT_MAX;
 int newBound;
 int bound;
 int found;
 int master = 0;
 int comp;
 int cnt;
-int stepSize;
-int clearVisited = 0;
+int sleeptime; 
+int cntmax; 
 
 map<char, char> path;
 map<unsigned long long, int> visited;
@@ -64,6 +60,7 @@ int iter=0;
 int main ( int argc, char *argv[] ) {
   
   int N;
+  double start, end;
   int my_rank, num_cores;
   int** matrix;
   int** solved;
@@ -84,90 +81,113 @@ int main ( int argc, char *argv[] ) {
   //Get the individual process ID
   my_rank = MPI::COMM_WORLD.Get_rank();
 
-  //clock_t start = clock();
   int GRID = N*N;
 
+  if (my_rank == 0) { 
+    start = MPI::Wtime();
+  }
+
+  //master generates a random array
   if (my_rank == master) {
 
     cout << "\n---------------------------------" << endl;
 
     numbers = new int[GRID];
-    //numbers = generate_random_array(GRID);
-    int stuff[9] = {8, 0, 4, 7, 2, 6, 3, 5, 1};
-    //numbers = generate_random_array(GRID);
-    for (int i=0; i<GRID; i++) {
-      numbers[i] = stuff[i];
-    }
-
+    numbers = generate_random_array(GRID);
     matrix = convertArraytoMatrix(numbers, N);
     printMatrix(matrix, N, N);
     cout << endl;
 
+    //master checks if the random arrangement produces a solvable puzzle
     bool solvable = isSolvable(numbers, GRID);
     if (!solvable) {
       cout << "Puzzle is not solvable\n" << endl;
-
       delete numbers;
       freeMatrix(matrix, N);
       solve = 0;
-     //MPI::Finalize();
-      //return 0;
     } else {
       cout << "Puzzle is solvable!\n" << endl;
       solve = 1;
+
+      if (N == 3) { 
+	bound = 30;
+        sleeptime = 500;
+        cntmax = 80;
+      } else if (N == 4) {
+        bound = 80;
+        sleeptime = 5000;
+        cntmax = 10000;
+      } else if (N == 5) {
+        bound = 200;
+      }
+
     }
 
   }
 
+  //master notifies all cores whether puzzle is solvable or not
+  //and specifies their timers
   MPI_Bcast(&solve, 1, MPI_INT, master, MPI_COMM_WORLD);
+  MPI_Bcast(&sleeptime, 1, MPI_INT, master, MPI_COMM_WORLD);
+  MPI_Bcast(&cntmax, 1, MPI_INT, master, MPI_COMM_WORLD);
   MPI_Barrier(MPI_COMM_WORLD);
 
   if (solve == 1) {
 
     if (my_rank == master) {
-      int num_steps = ida_star(numbers, GRID);
-      cout << "SOLUTION FOUND" << endl;
-      cout << "NUM STEPS: " << bound << endl;
+
+      int* infoToSend = new int[3];
+      bool noSolution = true;
+
+      //find where the blank spot is
+      int section = findSection(numbers, GRID);
+
+      //send the appropriate core the grid & starting information to begin solving
+      MPI_Send(numbers, GRID, MPI_INT, section+1, 123, MPI_COMM_WORLD);
+      infoToSend[0] = 0;
+      infoToSend[1] = manhattanDistances(numbers, GRID);
+      infoToSend[2] = bound;
+      MPI_Send(infoToSend, 3, MPI_INT, section+1, 123, MPI_COMM_WORLD);
+
+      //keep waiting for a core to send the solution (1) 
+      while (noSolution) {
+
+        int finished;
+        MPI_Status status;
+
+        MPI_Recv(&finished, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        if (finished==1) {
+          noSolution = false;
+
+          end = MPI::Wtime();
+          cout << "\nElapsed wall clock time: " << end-start << " seconds. " << endl;
+
+ 	  //once a solution has been found, call MPI_Abort on all cores so they stop searching for a solution
+	  delete numbers;
+          freeMatrix(matrix, N);
+          int errorcode = 0;
+          MPI_Abort(MPI_COMM_WORLD, errorcode);
+        } 
+      }
+
     } else {
       slave(GRID, my_rank);
     }
-
-  //if (my_rank == master){
-    //printPath(num_steps), printf("\n");
-    //solved = convertArraytoMatrix(numbers, N);
-    //printMatrix(solved, N, N);
-  //}
-      MPI::Finalize();
-
-   return 0;
     
-
   } else {
 
     if (my_rank == master) {
 
-
       cout << "---------------------------------" << endl;
+      end = MPI::Wtime();
+      cout << "Elapsed wall clock time: " << end-start << " seconds. " << endl;
 
     }
 
-       MPI::Finalize();
-
-   return 0;
+    MPI::Finalize();
 
   }
-
-  // if (my_rank == master) {
-  // delete numbers;
-  // freeMatrix(matrix, N);
-  // freeMatrix(solved, N);
-  // //clock_t end = clock();
-
-  // cout << "---------------------------------" << endl;
-  // }
-
-  //cout << setprecision(15) << "EXECUTION TIME: " << double(end-start)/CLOCKS_PER_SEC << " seconds\n" << endl;
-
+  return 0;
 }
 
 int* generate_random_array(int grid_size) {
@@ -220,18 +240,6 @@ int convertCoordinatestoIndex(int i, int j, int n) {
   return i*n+j;
 }
 
-int manhattan(int start, int end, int* array, int n) {
-    int goal_i = array[end] / n; //where the number at possible swap should end up (i)
-    int goal_j = array[end] % n; //where the number at possible swap should end up (j)
-    int initial_i = start / n; //current i location of space
-    int initial_j = start % n; //current j location of space
-    int possible_i = end / n; //the position of i possible swap
-    int possible_j = end % n; //the position of j possible swap
-    int dist_blank_from_goal = (abs(initial_i - goal_i) + abs(initial_j - goal_j));
-    int dist_possible_from_goal = (abs(possible_i - goal_i) + abs(possible_j - goal_j));
-    return dist_blank_from_goal - dist_possible_from_goal;
-}
-
 void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n) {
   std::map<int, int>::iterator it;
   it = theMap.find(curr_key);
@@ -250,6 +258,7 @@ void findCycle(std::map<int,int> theMap, int initial_key, int curr_key, int n) {
   }
 }
 
+//locates the row of the board where the blank spot is located
 int findSection(int* array, int grid_size) {
   int i;
   for (i = 0; i < grid_size; i++) {
@@ -260,94 +269,28 @@ int findSection(int* array, int grid_size) {
   return (i /= sqrt(grid_size));
 }
 
-int ida_star(int* array, int grid_size) {
-
-  bound = manhattanDistances(array, grid_size);
-  cout << "INITIAL BOUND: " << bound << endl;
-  int nextBound;
-  int* infoToSend = new int[5];
-  int oldBound = 0;
-
-  int iter=0;
-  bool noSolution = true;
-
-  //while (iter < 5) {
-  while (noSolution) {
-
-    //find where the blank spot is
-    int section = findSection(array, grid_size);
-
-    nextBound = INT_MAX;
-    //path.clear();
-    //visited.clear();
-
-    if (bound > oldBound) { 
-      oldBound = bound;
-      //send starting board & info to appropriate core
-      MPI_Send(array, grid_size, MPI_INT, section+1, 123, MPI_COMM_WORLD);
-      infoToSend[0] = 0;
-      infoToSend[1] = manhattanDistances(array,grid_size);
-      infoToSend[2] = bound;
-      infoToSend[3] = nextBound;
-      infoToSend[4] = 1;
-      //cout << "0: I AM SENDING TO " << section+1 << ". ";
-      //printArray(infoToSend, 5);
-      MPI_Send(infoToSend, 5, MPI_INT, section+1, 123, MPI_COMM_WORLD);
-    } 
-    int finished;
-    MPI_Status status;
-
-    MPI_Recv(&finished, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-    if (finished==1) {
-      noSolution = false;
-    } else {
-      bound = finished;
-      //cout << "0: BOUND: " << bound << endl;
-    }
-
-    //iter++;
-  }
-
-  return 1;
-}
-
+//Each core receives a grid to explore and performs DFS on it
 void slave(int grid_size, int rank) {
-  int solve;
   int* array = new int[grid_size];
-  int* info = new int[5];
-  int** arrayInfo = new int*[2];
-  stack<int**> unexplored;
+  int* info = new int[3];
   MPI_Status status1, status2;
   MPI_Request first, second;
 
   bool noSolution = true;
 
+  //keep receiving arrays to explore until a solution has been found
   while(noSolution) {
 
     MPI_Irecv(array, grid_size, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &first);
-    //cout << rank << ": RECEIVING ARRAY: ";
-    //printArray(array, grid_size);
-    MPI_Irecv(info, 5, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &second);
-    //cout << rank << ": RECEIVING: " << info[0] << " " << info[1] << " " << info[2] << " " << info[3] << " " << info[4] << endl;
-
-    // int tag = status2.MPI_TAG;
-    // if (tag == 123) {
-    //   bound = info[2];
-    // }
-
-    //cout << rank << ": SLAVE BOUND: " << bound << endl;
+    MPI_Irecv(info, 3, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &second);
 
     comp = 0;
     cnt = 0;
-    while(!comp && (cnt <= 25)) {
-      sleep(1);
+    //we need to wait some time before canceling MPI_Irecv
+    while(!comp && (cnt <= cntmax)) {
+      usleep(sleeptime);
       MPI_Test(&first, &comp, &status1);
       MPI_Test(&second, &comp, &status2);
-      int tag = status2.MPI_TAG;
-      if (tag == 123) {
-        bound = info[2];
-        //visited.clear();
-      }
       cnt++;
     }
 
@@ -357,75 +300,43 @@ void slave(int grid_size, int rank) {
       MPI_Wait(&first, &status1);
       MPI_Wait(&second, &status2);
       noSolution = false;
-      //cout << rank << ": NOTHING RECEIVED" << endl;
+      cout << rank << ": NOTHING RECEIVED. " << endl;
+
+    //explore the grid!
     } else {
-      //cout << rank << ": I RECEIVED AN ARRAY: " << " ";
-      //printArray(array, grid_size);
-
-      arrayInfo[0] = array;
-      arrayInfo[1] = info;
-      unexplored.push(arrayInfo);
-      // if (info[4] == 1) {
-      //   visited.clear();
-      // }
-      //cout << rank << ": STACK SIZE: " << unexplored.size() << endl;
-
-      //cout << "STEPS: " << unexplored.top()[1][0] << endl;
-      //cout << "CURRMANHAT: " << unexplored.top()[1][1] << endl;
-      //cout << "SLAVE BOUND: " << unexplored.top()[1][2] << endl;
-      //cout << "NEXT BOUND: " << unexplored.top()[1][3] << endl;
-
-      ///cout << rank << ": MY STACK SIZE: " << unexplored.size() << " ";
-      //printArray(unexplored.top()[0], grid_size);
-
-      while(!unexplored.empty()) {
-        int* gridToExplore = unexplored.top()[0];
-        if(dfs(unexplored.top()[1][0], unexplored.top()[1][1], gridToExplore, grid_size, unexplored.top()[1][2], unexplored.top()[1][3], rank, 0)) {
-          found = 1;
+      if(dfs(info[0], info[1], array, grid_size, nextBound, info[2], rank, 0)) {
+        found = 1;
+        MPI_Send(&found, 1, MPI_INT, 0, 123, MPI_COMM_WORLD);
+        int** solved = convertArraytoMatrix(array, sqrt(grid_size));
+        printMatrix(solved, sqrt(grid_size), sqrt(grid_size));
+        freeMatrix(solved, sqrt(grid_size));
+        noSolution = false;
+      } else {
+        //tell the master that the bound was increased
+        if (newBound > bound) {
+          found = 0;
+          bound = newBound;
           MPI_Send(&found, 1, MPI_INT, 0, 123, MPI_COMM_WORLD);
-          printArray(array, grid_size);
-          noSolution = false;
-        } else {
-          //cout << rank << ": BOUND: " << bound << ". STEPSIZE: " << stepSize << endl; 
-          //cout << rank << ": SLAVE NEWBOUND: " << newBound << endl;
-          if (newBound > bound) {
-            bound = newBound;
-            //MPI_Bcast(&bound, 1, MPI_INT, rank, MPI_COMM_WORLD);
-            //cout << rank << ": SENDING TO MASTER THE NEW BOUND " << newBound << endl;
-            MPI_Send(&newBound, 1, MPI_INT, 0, 123, MPI_COMM_WORLD);
-            //visited.clear();
-          }
-          //int found = 0;
-          //cout << "AFTER DFS NEW BOUND: " << newBound << endl;
-          //MPI_Send(&newBound, 1, MPI_INT, 0, 123, MPI_COMM_WORLD);
-          //visited.clear();
         }
-        unexplored.pop();
       }
-      //cout << rank << ": AFTER EXPLORING" << endl;
     }
 
   }
-
 }
 
-bool dfs(int steps, int currManhat, int* array, int grid_size, int bound, int nextBound, int rank, int iter) {
-
-  if (bound == 24) {
-    //cout << rank << ": ***************************************BOUND IS 24**************************" << endl;
-  }
+//dfs function remains mostly the same as in the serial code
+bool dfs(int steps, int currManhat, int* array, int grid_size, int nextBound, int bound, int rank, int iter) {
 
   if (steps + currManhat > bound) {
     nextBound = min(nextBound, steps + currManhat);
     newBound = nextBound;
-    //cout << rank << ": DFS NEBOUND: " << newBound << endl;
-    //cout << rank << ": IN THE INCREASING BOUND" << endl;
     return false;
   }
 
   if (isSolution(array, grid_size)) {
-
-    printArray(array, grid_size);
+    cout << "CORE " << rank << " FOUND THE SOLUTION\n";
+    cout << "***************************************************\n";
+    cout << "***************************************************\n";
     return true;
   }
 
@@ -436,7 +347,6 @@ bool dfs(int steps, int currManhat, int* array, int grid_size, int bound, int ne
   }
 
   if (visited.count(state) && (visited[state] <= steps)) { // we want to prevent cycling on the grid
-    //cout << rank << ": I AM CYCLING" << endl;
     return false;
   }
 
@@ -454,83 +364,56 @@ bool dfs(int steps, int currManhat, int* array, int grid_size, int bound, int ne
 
   int index = convertCoordinatestoIndex(i, j, sqrt(grid_size));
 
+  //keep recursively checking to the right for the given core
   if(checkRight(j+1, sqrt(grid_size))) {
     int new_index = convertCoordinatestoIndex(i, j+1, sqrt(grid_size));
     int dh = manhattan(index, new_index, array, sqrt(grid_size));
     swap(array, i*sqrt(grid_size)+j, i*sqrt(grid_size)+j+1);
-    //cout << rank << ": ITERATION: " << iter << ". CURRENT BOUND: " << bound << ". I am exploring to the right: ";
-    //printArray(array, grid_size);
-    path[steps + 1] = 'R';
-    if (dfs(steps + 1, currManhat + dh, array, grid_size, bound, nextBound, rank, iter+1)) { // if ok, no need to restore, just go ahead
+    if (dfs(steps + 1, currManhat + dh, array, grid_size, nextBound, bound, rank, iter+1)) { 
       return true;
     }
     swap(array, i*sqrt(grid_size)+j, i*sqrt(grid_size)+j+1); // restore
   }
+  //send the new grid to the appropriate core for exploring
   if (checkUp(i-1)) {
     int new_index = convertCoordinatestoIndex(i-1, j, sqrt(grid_size));
     int dh = manhattan(index, new_index, array, sqrt(grid_size));
     swap(array, i*sqrt(grid_size)+j, (i-1)*sqrt(grid_size)+j);
-    //cout << rank << ": ITERATION: " << iter << ". CURRENT BOUND: " << bound << ". I am exploring up ";
-    //printArray(array, grid_size);
-    path[steps + 1] = 'U';
     int section = findSection(array, grid_size);
     MPI_Send(array, grid_size, MPI_INT, section+1, 5, MPI_COMM_WORLD);
-    int* infoToSend = new int[5];
+    int* infoToSend = new int[3];
     infoToSend[0] = steps+1;
     infoToSend[1] = currManhat+dh;
     infoToSend[2] = bound;
-    infoToSend[3] = nextBound;
-    infoToSend[4] = 0;
-    //cout << rank << ": I AM SENDING TO " << section+1 << ". ";
-    //printArray(infoToSend, 5);
-    MPI_Send(infoToSend, 5, MPI_INT, section+1, 5, MPI_COMM_WORLD);
+    MPI_Send(infoToSend, 3, MPI_INT, section+1, 5, MPI_COMM_WORLD);
     swap(array, i*sqrt(grid_size)+j, (i-1)*sqrt(grid_size)+j); // restore
-    //return false;
   }
+  //keep recursively checking to the left for the given core
   if (checkLeft(j-1)) {
     int new_index = convertCoordinatestoIndex(i, j-1, sqrt(grid_size));
     int dh = manhattan(index, new_index, array, sqrt(grid_size));
     swap(array, i*sqrt(grid_size)+j, i*sqrt(grid_size)+(j-1)); //swap
-    //cout << rank << ": ITERATION: " << iter << ". I am exploring to the left ";
-    //printArray(array, grid_size);
-    path[steps + 1] = 'L';
-    if (dfs(steps + 1, currManhat + dh, array, grid_size, bound, nextBound, rank, iter+1)) { // if ok, no need to restore, just go ahead
+    if (dfs(steps + 1, currManhat + dh, array, grid_size,  nextBound, bound, rank, iter+1)) { 
       return true;
     }
     swap(array, i*sqrt(grid_size)+j, i*sqrt(grid_size)+(j-1)); // restore
   }
+  //send the new grid to the appropriate core for exploring
   if (checkDown(i+1, sqrt(grid_size))) {
     int new_index = convertCoordinatestoIndex(i+1, j, sqrt(grid_size));
     int dh = manhattan(index, new_index, array, sqrt(grid_size));
     swap(array, i*sqrt(grid_size)+j, (i+1)*sqrt(grid_size)+j);
-    //cout << rank << ": ITERATION: " << iter << ". I am exploring down ";
-    //printArray(array, grid_size);
-    path[steps + 1] = 'D';
     int section = findSection(array, grid_size);
     MPI_Send(array, grid_size, MPI_INT, section+1, 5, MPI_COMM_WORLD);
-    int* infoToSend = new int[5];
+    int* infoToSend = new int[3];
     infoToSend[0] = steps+1;
     infoToSend[1] = currManhat+dh;
     infoToSend[2] = bound;
-    infoToSend[3] = nextBound;
-    infoToSend[4] = 0;
-    //cout << rank << ": I AM SENDING TO " << section+1 << ". ";
-    //printArray(infoToSend, 5);
-    MPI_Send(infoToSend, 5, MPI_INT, section+1, 5, MPI_COMM_WORLD);
+    MPI_Send(infoToSend, 3, MPI_INT, section+1, 5, MPI_COMM_WORLD);
     swap(array, i*sqrt(grid_size)+j, (i+1)*sqrt(grid_size)+j); // restore
-    //return false;
   }
-  //cout << rank << ": FINISHED EXPLORING THIS STATE" << endl;
 
   return false;
-}
-
-void printPath(int previous) {
-  if (previous == 0) {
-    return;
-  }
-  printPath(previous - 1);
-  printf("%c", path[previous]);
 }
 
 bool checkLeft(int j) {
@@ -549,10 +432,6 @@ bool checkDown(int i, int n) {
   return (i < n);
 }
 
-bool checkMove(int i, int j, int n) {
-  return (checkLeft(j) && checkRight(j, n) && checkUp(i) && checkDown(i, n));
-}
-
 bool isSolution(int* array, int grid_size) {
   for (int i=0; i<grid_size; i++) {
     if (array[i] != grid_size-1 && array[i] != i) {
@@ -566,6 +445,18 @@ void swap(int* array, int loc1, int loc2) {
   int temp = array[loc1];
   array[loc1] = array[loc2];
   array[loc2] = temp;
+}
+
+int manhattan(int start, int end, int* array, int n) {
+    int goal_i = array[end] / n; //where the number at possible swap should end up (i)
+    int goal_j = array[end] % n; //where the number at possible swap should end up (j)
+    int initial_i = start / n; //current i location of space
+    int initial_j = start % n; //current j location of space
+    int possible_i = end / n; //the position of i possible swap
+    int possible_j = end % n; //the position of j possible swap
+    int dist_blank_from_goal = (abs(initial_i - goal_i) + abs(initial_j - goal_j));
+    int dist_possible_from_goal = (abs(possible_i - goal_i) + abs(possible_j - goal_j));
+    return dist_blank_from_goal - dist_possible_from_goal;
 }
 
 int manhattanDistances(int* array, int grid_size) {
